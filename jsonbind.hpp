@@ -8,7 +8,7 @@
 #include <json.hpp>
 using json = nlohmann::json;
 
-/* 使用案例
+/* 使用案例 Use Case
 struct Student
 {
 	struct Pen
