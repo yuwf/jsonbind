@@ -1,14 +1,14 @@
 ﻿#ifndef INCLUDE_JSONBIND_HPP_
 #define INCLUDE_JSONBIND_HPP_
 
-// by yuwf qingting.water@gmail.com
+// by git@github.com:yuwf/jsonbind.git
 
 // 将结构与nlohmann::json绑定，结构和json可以相互转换
 // https://github.com/nlohmann/json
 #include <json.hpp>
 using json = nlohmann::json;
 
-/* 使用案例 Use Case
+/* 使用案例
 struct Student
 {
 	struct Pen
