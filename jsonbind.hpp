@@ -54,6 +54,7 @@ student.from_msgpack(msgpack.data(), msgpack.size());
 // 自定义类型支持嵌套时，json内部调用转化成json
 namespace nlohmann
 {
+	// 支持结构和json转化
 	template <typename T>
 	struct adl_serializer<T, typename std::enable_if<T::JSON_BIND_SUPPORT>::type>
 	{
@@ -67,7 +68,38 @@ namespace nlohmann
 			{
 				throw detail::type_error::create(302, std::string("type must be object[") + typeid(T).name() + "], but is " + std::string(j.type_name()), j);
 			}
-			o.from_json(j);
+			o._from_json(j);
+		}
+	};
+
+	// std::map的key类型为int时，json内部按数组处理，这里给调整下
+	template <typename Key, typename Value, typename Compare, typename Allocator>
+	struct adl_serializer<std::map<Key, Value, Compare, Allocator>, typename std::enable_if<std::is_integral<Key>::value>::type>
+	{
+		using T = std::map<Key, Value, Compare, Allocator>;
+
+		static void to_json(json& j, const T& o)
+		{
+			for (const auto& it : o)
+			{
+				j[std::to_string(it.first)] = it.second;
+			}
+		}
+		static void from_json(const json& j, T& o)
+		{
+			if (!j.is_object())
+			{
+				throw detail::type_error::create(302, std::string("type must be object[") + typeid(T).name() + "], but is " + std::string(j.type_name()), j);
+			}
+
+			const auto* inner_object = j.template get_ptr<const typename json::object_t*>();
+			std::transform(
+				inner_object->begin(), inner_object->end(),
+				std::inserter(o, o.begin()),
+				[](typename json::object_t::value_type const& p)
+				{
+					return T::value_type(atoi(p.first.c_str()), p.second.template get<typename T::mapped_type>());
+				});
 		}
 	};
 }
@@ -231,6 +263,7 @@ namespace nlohmann
 // 参数seq，结构字段
 // (member)(member)
 // member为结构字段
+// _from_json 是给内部使用的 他不包异常，异常一直往上传导
 #define JSON_BIND(...) \
 	enum { JSON_BIND_SUPPORT = 1 };\
 	static const std::vector<std::string>& json_key() \
@@ -260,12 +293,17 @@ namespace nlohmann
 		} \
 		return false; \
 	} \
+	void _from_json(const json& j) \
+	{ \
+		JSON_BIND_SEQ_FOR(JSON_BIND_SEQ_FROM_JSON_A __VA_ARGS__) \
+	} \
 	JSON_BIND_FUNCTION();
 
 // 参数seq结构，内部嵌套的是pair结构
 // (first, second)(first, second)
 // first为std::string的类型或可以隐世转出std::string类型
 // second为结构字段
+// _from_json 是给内部使用的 他不包异常，异常一直往上传导
 #define JSON_BIND_MAP(...) \
 	enum { JSON_BIND_SUPPORT = 1 };\
 	static const std::vector<std::string>& json_key() \
@@ -294,6 +332,10 @@ namespace nlohmann
 			if (err){ *err = ex.what();} \
 		} \
 		return false; \
+	} \
+	void _from_json(const json& j) \
+	{ \
+		JSON_BIND_SEQ_FOR(JSON_BIND_SEQMAP_FROM_JSON_A __VA_ARGS__) \
 	} \
 	JSON_BIND_FUNCTION();
 

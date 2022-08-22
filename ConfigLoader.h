@@ -8,7 +8,7 @@
 #include "jsonbind.hpp"
 
 #include "LLog.h"
-#define ConfigLogError LLOG_ERROR
+#define ConfigLogError LLOG_FATAL
 #define ConfigLogInfo LLOG_INFO
 
 // 多线程安全
@@ -17,17 +17,8 @@ template <class T>
 class ConfigLoader
 {
 public:
-	ConfigLoader()
-	{
-		m_data = std::make_shared<const T>();
-	}
-
 	// 获取配置对象，数据对象是只读的，可以被多线程共享
-	std::shared_ptr<const T> Get()
-	{
-		std::unique_lock<std::mutex> lock(m_mutex);
-		return m_data;
-	}
+	// 获取的对象一定不为空，外层无需判断
 	std::shared_ptr<const T> GetConfig()
 	{
 		std::unique_lock<std::mutex> lock(m_mutex);
@@ -35,7 +26,7 @@ public:
 	}
 
 	// 获取原始配置
-	std::string Src()
+	std::string GetSrc()
 	{
 		std::unique_lock<std::mutex> lock(m_mutex);
 		return m_src;
@@ -52,10 +43,8 @@ public:
 			ConfigLogError("LoadJsonFromString err=%s src=%s", err.c_str(), src.c_str());
 			return false;
 		}
-		else
-		{
-			ConfigLogInfo("LoadJsonFromString Success src=%s", src.c_str());
-		}
+
+		ConfigLogInfo("LoadJsonFromString Success src=%s", src.c_str());
 		data->Normalize();
 
 		{
@@ -71,11 +60,20 @@ public:
 		std::ifstream ifs(filename.c_str(), std::ifstream::in);
 		if (!ifs.is_open())
 		{
-			ConfigLogInfo("LoadJsonFromFile open fail filename=%s", filename.c_str());
+			ConfigLogError("LoadJsonFromFile open fail filename=%s", filename.c_str());
 			return false;
 		}
 		std::stringstream ss;
-		ss << ifs.rdbuf();
+		try
+		{
+			ss << ifs.rdbuf();
+		}
+		catch (const exception& ex)
+		{
+			ConfigLogError("LoadJsonFromFile read fail filename=%s ex=%s", filename.c_str(), ex.what());
+			ifs.close();
+			return false;
+		}
 		ifs.close();
 		return LoadFromJsonString(ss.str());
 	}
@@ -85,12 +83,19 @@ public:
 		std::ofstream ofs(filename, std::ofstream::out);
 		if (!ofs.is_open())
 		{
-			ConfigLogInfo("SaveToFile open fail filename=%s", filename.c_str());
+			ConfigLogError("SaveToFile open fail filename=%s", filename.c_str());
 			return false;
 		}
+		std::string src = GetSrc();
+		try
 		{
-			std::unique_lock<std::mutex> lock(m_mutex);
-			ofs << m_src;	// 文本输出
+			ofs << src;	// 文本输出
+		}
+		catch (const exception& ex)
+		{
+			ConfigLogError("SaveToFile write fail filename=%s ex=%s", filename.c_str(), ex.what());
+			ofs.close();
+			return false;
 		}
 		ofs.close();
 		return true;
@@ -98,7 +103,7 @@ public:
 
 private:
 	std::mutex m_mutex;
-	std::shared_ptr<const T> m_data; // 一定不为空，外层无需判断
+	std::shared_ptr<const T> m_data = std::make_shared<const T>(); // 初始值
 	std::string m_src;	// 原始配置
 };
 
