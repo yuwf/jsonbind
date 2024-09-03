@@ -5,11 +5,15 @@
 
 #include<memory>
 #include<iosfwd>
+#include <mutex>
+#include <exception>
 #include "jsonbind.hpp"
 
-#include "LLog.h"
-#define ConfigLogError LLOG_FATAL
-#define ConfigLogInfo LLOG_INFO
+//#include "LLog.h"
+//#define ConfigLogError LLOG_FATAL
+//#define ConfigLogInfo LLOG_INFO
+#define ConfigLogError
+#define ConfigLogInfo
 
 // 多线程安全
 // 要求 T 定义 Normalize 函数
@@ -22,6 +26,12 @@ public:
 	std::shared_ptr<const T> GetConfig()
 	{
 		std::unique_lock<std::mutex> lock(m_mutex);
+		if (m_data == nullptr)
+		{
+			T* data = new T();
+			data->Normalize();
+			m_data = std::shared_ptr<const T>(data);
+		}
 		return m_data;
 	}
 
@@ -68,7 +78,7 @@ public:
 		{
 			ss << ifs.rdbuf();
 		}
-		catch (const exception& ex)
+		catch (const std::exception& ex)
 		{
 			ConfigLogError("LoadJsonFromFile read fail filename=%s ex=%s", filename.c_str(), ex.what());
 			ifs.close();
@@ -91,7 +101,7 @@ public:
 		{
 			ofs << src;	// 文本输出
 		}
-		catch (const exception& ex)
+		catch (const std::exception& ex)
 		{
 			ConfigLogError("SaveToFile write fail filename=%s ex=%s", filename.c_str(), ex.what());
 			ofs.close();
@@ -103,7 +113,7 @@ public:
 
 private:
 	std::mutex m_mutex;
-	std::shared_ptr<const T> m_data = std::make_shared<const T>(); // 初始值
+	std::shared_ptr<const T> m_data;
 	std::string m_src;	// 原始配置
 };
 
